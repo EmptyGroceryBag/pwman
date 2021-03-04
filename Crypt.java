@@ -1,6 +1,15 @@
 //Util
 import java.util.Scanner;
 
+//I/O
+import java.io.InputStream;
+import java.io.BufferedInputStream;
+import java.io.OutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
 //Maps
 import java.util.LinkedHashMap;
 
@@ -13,6 +22,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
+import java.security.InvalidKeyException;
 
 //Crypto
 import javax.crypto.Cipher;
@@ -69,11 +79,51 @@ public class Crypt
 			
 			printByteArray(key.getEncoded());
 
-			Cipher encrypt = Cipher.getInstance("PBEWithMD5AndTripleDES");
-			encrypt.init(Cipher.ENCRYPT_MODE, key);
+
+			// encrypt file
+			//InputStream fstream = new FileInputStream("test.txt");
+			// @MAYBE switch to a buffered stream. 
+			//OutputStream eout = new FileOutputStream("test.txt"); 
+			File f = new File("test.txt");
+			File encryptedFile = encryptFileAES(f, key);
+
 		} catch(Exception e) { e.printStackTrace(); }
 
 		//encrypt.doFinal(toByteArray("secret message"));
+	}
+
+	//TODO: try javax.crypto.CipherOutputStream
+	public static File encryptFileAES(File inputFile, Key key) throws Exception
+	{
+		/*
+		 * open new file for encrypted data
+		 * Read each byte from original file
+		 * encrypt each byte
+		 * write encrypted bytes
+		 * delete original file
+		 * */
+
+		Cipher encrypt = Cipher.getInstance("PBEWithMD5AndTripleDES");
+		encrypt.init(Cipher.ENCRYPT_MODE, key);
+
+		InputStream istream = new BufferedInputStream(new FileInputStream("test.txt"), 1024);
+		File outputFile = new File(inputFile.getName() + ".aes");
+		OutputStream ostream = new FileOutputStream(outputFile);
+
+		if(!outputFile.exists())
+			outputFile.createNewFile();
+
+		byte[] buffer = new byte[1024];
+
+		while((istream.read(buffer, 0, 1024) != -1)){
+			byte[] encryptedBuffer = encrypt.doFinal(buffer);
+			ostream.write(encryptedBuffer);
+		}
+
+		ostream.flush();
+		ostream.close();
+
+		return outputFile;
 	}
 	
 	public static void printByteArray(byte[] a)
