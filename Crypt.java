@@ -23,15 +23,19 @@ import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
 import java.security.InvalidKeyException;
+import java.security.spec.AlgorithmParameterSpec;
 
 //Crypto
 import javax.crypto.Cipher;
+import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.interfaces.PBEKey;
+import javax.crypto.spec.PBEParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
 
 /*
  * To generate an AES key:
@@ -49,6 +53,10 @@ public class Crypt
 		byte[] data = new byte[128];
 		rand.nextBytes(data);
 
+		byte[] initVector = new byte[16];
+		rand.nextBytes(initVector);
+		AlgorithmParameterSpec ivspec = new IvParameterSpec(initVector);
+
 		System.out.println("Seed:");
 		for(byte b : seed)
 		{
@@ -65,8 +73,11 @@ public class Crypt
 
 		//KeyGenerator keygen = new KeyGenerator();
 		Scanner kbd = new Scanner(System.in);
+		/*
 		System.out.println("\nEnter password");
 		String pw = kbd.nextLine();
+		*/
+		String pw = "1234";
 		kbd.close();
 
 		//SecretKey key = new SecretKeySpec(toByteArray(pw), "AES");
@@ -74,11 +85,11 @@ public class Crypt
 		// generate key
 		try{
 			KeySpec pwkeyspec = new PBEKeySpec(pw.toCharArray(), seed, 128 * 8, 128);
-			SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithMD5AndTripleDES");
+			AlgorithmParameterSpec pwparams = new PBEParameterSpec(seed, 128 * 8, ivspec); // might not have to do this
+			SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithHmacSHA256AndAES_128");
 			SecretKey key = keyFactory.generateSecret(pwkeyspec);
 			
-			printByteArray(key.getEncoded());
-
+			//printByteArray(key.getEncoded());
 
 			// encrypt file
 			//InputStream fstream = new FileInputStream("test.txt");
@@ -86,6 +97,7 @@ public class Crypt
 			//OutputStream eout = new FileOutputStream("test.txt"); 
 			File f = new File("test.txt");
 			File encryptedFile = encryptFileAES(f, key);
+			File decryptedFile = decryptFileAES(encryptedFile, key, pwparams);
 
 		} catch(Exception e) { e.printStackTrace(); }
 
@@ -102,30 +114,55 @@ public class Crypt
 		 * write encrypted bytes
 		 * delete original file
 		 * */
-
-		Cipher encrypt = Cipher.getInstance("PBEWithMD5AndTripleDES");
+		Cipher encrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
 		encrypt.init(Cipher.ENCRYPT_MODE, key);
 
-		InputStream istream = new BufferedInputStream(new FileInputStream("test.txt"), 1024);
+		InputStream istream = new BufferedInputStream(new FileInputStream(inputFile), 1024);
 		File outputFile = new File(inputFile.getName() + ".aes");
-		OutputStream ostream = new FileOutputStream(outputFile);
+		OutputStream ostream = new CipherOutputStream(new FileOutputStream(outputFile), encrypt);
 
 		if(!outputFile.exists())
 			outputFile.createNewFile();
 
-		byte[] buffer = new byte[1024];
+		int b = 0;
+		while((b = istream.read()) != -1)
+			ostream.write(b);
 
-		while((istream.read(buffer, 0, 1024) != -1)){
-			byte[] encryptedBuffer = encrypt.doFinal(buffer);
-			ostream.write(encryptedBuffer);
-		}
+		istream.close();
+		ostream.flush();
+		ostream.close();
+
+		return outputFile;
+	}
+
+	//TODO: try javax.crypto.CipherOutputStream
+	public static File decryptFileAES(File inputFile, Key key, AlgorithmParameterSpec pwparams) throws Exception
+	{
+		/*
+		 * open new file for encrypted data
+		 * Read each byte from original file
+		 * encrypt each byte
+		 * write encrypted bytes
+		 * delete original file * */ Cipher decrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
+		decrypt.init(Cipher.DECRYPT_MODE, key, pwparams);
+
+		InputStream istream = new BufferedInputStream(new FileInputStream(inputFile), 1024);
+		File outputFile = new File("test.txt.decrypt");
+		OutputStream ostream = new CipherOutputStream(new FileOutputStream(outputFile), decrypt);
+
+		if(!outputFile.exists())
+			outputFile.createNewFile();
+
+		int b = 0;
+		while((b = istream.read()) != -1)
+			ostream.write(b);
 
 		ostream.flush();
 		ostream.close();
 
 		return outputFile;
 	}
-	
+
 	public static void printByteArray(byte[] a)
 	{
 		for(byte b : a)
