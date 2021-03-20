@@ -49,75 +49,43 @@ public class Crypt
 	{
 		SecureRandom rand = new SecureRandom();
 
+		// random salt and IV
 		byte[] seed = rand.generateSeed(16);
-		byte[] data = new byte[128];
-		rand.nextBytes(data);
-
 		byte[] initVector = new byte[16];
 		rand.nextBytes(initVector);
 		AlgorithmParameterSpec ivspec = new IvParameterSpec(initVector);
 
-		System.out.println("Seed:");
-		for(byte b : seed)
-		{
-			System.out.printf("%2x, ", b);
-		}
-
-		/*
-		System.out.println("\nData:");
-		for(byte b : data)
-		{
-			System.out.printf("%2x, ", b);
-		}
-		*/
-
-		//KeyGenerator keygen = new KeyGenerator();
 		Scanner kbd = new Scanner(System.in);
-		/*
 		System.out.println("\nEnter password");
 		String pw = kbd.nextLine();
-		*/
-		String pw = "1234";
 		kbd.close();
 
-		//SecretKey key = new SecretKeySpec(toByteArray(pw), "AES");
-
-		// generate key
 		try{
 			KeySpec pwkeyspec = new PBEKeySpec(pw.toCharArray(), seed, 128 * 8, 128);
 			AlgorithmParameterSpec pwparams = new PBEParameterSpec(seed, 128 * 8, ivspec); // might not have to do this
 			SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithHmacSHA256AndAES_128");
 			SecretKey key = keyFactory.generateSecret(pwkeyspec);
 			
-			//printByteArray(key.getEncoded());
-
-			// encrypt file
-			//InputStream fstream = new FileInputStream("test.txt");
-			// @MAYBE switch to a buffered stream. 
-			//OutputStream eout = new FileOutputStream("test.txt"); 
-			File f = new File("test.txt");
-			File encryptedFile = encryptFileAES(f, key);
+			File f = new File("message.txt");
+			File encryptedFile = encryptFileAES(f, key, pwparams);
 			File decryptedFile = decryptFileAES(encryptedFile, key, pwparams);
 
 		} catch(Exception e) { e.printStackTrace(); }
-
-		//encrypt.doFinal(toByteArray("secret message"));
 	}
 
-	//TODO: try javax.crypto.CipherOutputStream
-	public static File encryptFileAES(File inputFile, Key key) throws Exception
+	public static File encryptFileAES(File inputFile, Key key, AlgorithmParameterSpec pwparams) throws Exception
 	{
 		/*
 		 * open new file for encrypted data
 		 * Read each byte from original file
 		 * encrypt each byte
 		 * write encrypted bytes
-		 * delete original file
+		 * @TODO delete original file
 		 * */
 		Cipher encrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
-		encrypt.init(Cipher.ENCRYPT_MODE, key);
+		encrypt.init(Cipher.ENCRYPT_MODE, key, pwparams);
 
-		InputStream istream = new BufferedInputStream(new FileInputStream(inputFile), 1024);
+		InputStream istream = new FileInputStream(inputFile);
 		File outputFile = new File(inputFile.getName() + ".aes");
 		OutputStream ostream = new CipherOutputStream(new FileOutputStream(outputFile), encrypt);
 
@@ -135,19 +103,13 @@ public class Crypt
 		return outputFile;
 	}
 
-	//TODO: try javax.crypto.CipherOutputStream
 	public static File decryptFileAES(File inputFile, Key key, AlgorithmParameterSpec pwparams) throws Exception
 	{
-		/*
-		 * open new file for encrypted data
-		 * Read each byte from original file
-		 * encrypt each byte
-		 * write encrypted bytes
-		 * delete original file * */ Cipher decrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
+		Cipher decrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
 		decrypt.init(Cipher.DECRYPT_MODE, key, pwparams);
 
-		InputStream istream = new BufferedInputStream(new FileInputStream(inputFile), 1024);
-		File outputFile = new File("test.txt.decrypt");
+		InputStream istream = new FileInputStream(inputFile);
+		File outputFile = new File("message.txt.decrypt");
 		OutputStream ostream = new CipherOutputStream(new FileOutputStream(outputFile), decrypt);
 
 		if(!outputFile.exists())
@@ -156,7 +118,8 @@ public class Crypt
 		int b = 0;
 		while((b = istream.read()) != -1)
 			ostream.write(b);
-
+		
+		istream.close();
 		ostream.flush();
 		ostream.close();
 
