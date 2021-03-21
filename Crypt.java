@@ -1,5 +1,7 @@
 //Util
 import java.util.Scanner;
+import java.util.Arrays;
+import java.util.Base64;
 
 //I/O
 import java.io.InputStream;
@@ -19,7 +21,6 @@ import java.security.PrivateKey;
 import java.security.KeyFactory;
 import java.security.Security;
 import java.security.NoSuchAlgorithmException;
-import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
 import java.security.InvalidKeyException;
@@ -31,99 +32,111 @@ import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.interfaces.PBEKey;
 import javax.crypto.spec.PBEParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 
-/*
- * To generate an AES key:
- * -Set up random salt
- * -New instance of PBEKeySpec
- */
-
 public class Crypt
 {
 	public static void main(String[] args)
 	{
-		SecureRandom rand = new SecureRandom();
+		System.out.println("\nEnter password");
+		char[] pw = System.console().readPassword();
 
 		// random salt and IV
-		byte[] seed = rand.generateSeed(16);
+		SecureRandom rand = new SecureRandom();
+
 		byte[] initVector = new byte[16];
 		rand.nextBytes(initVector);
+
+		byte[] seed = rand.generateSeed(16);
+		rand.nextBytes(seed);
+
 		AlgorithmParameterSpec ivspec = new IvParameterSpec(initVector);
 
-		Scanner kbd = new Scanner(System.in);
-		System.out.println("\nEnter password");
-		String pw = kbd.nextLine();
-		kbd.close();
-
 		try{
-			KeySpec pwkeyspec = new PBEKeySpec(pw.toCharArray(), seed, 128 * 8, 128);
-			AlgorithmParameterSpec pwparams = new PBEParameterSpec(seed, 128 * 8, ivspec); // might not have to do this
+			//(byte[] password, byte[] salt, int iterationCount, int keyLength)
+			KeySpec pwkeyspec = new PBEKeySpec(pw, seed, 128 * 8, 128);
 			SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithHmacSHA256AndAES_128");
 			SecretKey key = keyFactory.generateSecret(pwkeyspec);
-			
-			File f = new File("message.txt");
-			File encryptedFile = encryptFileAES(f, key, pwparams);
-			File decryptedFile = decryptFileAES(encryptedFile, key, pwparams);
 
+			AlgorithmParameterSpec pwparams = new PBEParameterSpec(seed, 128 * 8, ivspec);
+
+			String message = "Super secret message :D";
+			byte[] encryptedMessage = encryptStringAES(message, key, pwparams, ivspec);
+			String decryptedMessage = decryptStringAES(encryptedMessage);
 		} catch(Exception e) { e.printStackTrace(); }
 	}
 
-	public static File encryptFileAES(File inputFile, Key key, AlgorithmParameterSpec pwparams) throws Exception
+	/**
+	 * encryptStringAES - Encrypts a string using AES and a password. After the 
+	 * string is encrypted, the initialization vector and salt is appended.
+	 *
+	 * @param inputString		the string to be encrypted
+	 * @param key						AES key
+	 * @param pwparams			PBE parameters (object that has salt)
+	 * @param ivspec				object encapsulating the initialization vector
+	 *
+	 * @return 							encrypted bytes
+	 * **/
+	public static byte[] encryptStringAES(
+		String inputString,
+		Key key, 
+		AlgorithmParameterSpec pwparams,
+		AlgorithmParameterSpec ivspec) throws Exception
 	{
-		/*
-		 * open new file for encrypted data
-		 * Read each byte from original file
-		 * encrypt each byte
-		 * write encrypted bytes
-		 * @TODO delete original file
-		 * */
+		byte[] string = Base64.getEncoder().encode(toByteArray(inputString));
+		byte[] header = appendByteArray(((PBEParameterSpec)pwparams).getSalt(), ((IvParameterSpec)ivspec).getIV());
+
+		// this is the actual encryption process
 		Cipher encrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
 		encrypt.init(Cipher.ENCRYPT_MODE, key, pwparams);
 
-		InputStream istream = new FileInputStream(inputFile);
-		File outputFile = new File(inputFile.getName() + ".aes");
-		OutputStream ostream = new CipherOutputStream(new FileOutputStream(outputFile), encrypt);
+		byte[] encryptedString = encrypt.doFinal(string);
 
-		if(!outputFile.exists())
-			outputFile.createNewFile();
-
-		int b = 0;
-		while((b = istream.read()) != -1)
-			ostream.write(b);
-
-		istream.close();
-		ostream.flush();
-		ostream.close();
-
-		return outputFile;
+		return appendByteArray(header, encryptedString); 
 	}
 
-	public static File decryptFileAES(File inputFile, Key key, AlgorithmParameterSpec pwparams) throws Exception
+	public static String decryptStringAES(byte[] inputString, Key key, PBEParameterSpec pwparams, IvParameterSpec ivspec) throws Exception
 	{
-		Cipher decrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
-		decrypt.init(Cipher.DECRYPT_MODE, key, pwparams);
+		/*// get salt and IV from first 32 bits of array
+		byte[] initVector = new byte[16];
+		for(int i = 0; i < 16; i++)
+			initVector[i] = inputString[i];
 
-		InputStream istream = new FileInputStream(inputFile);
-		File outputFile = new File("message.txt.decrypt");
-		OutputStream ostream = new CipherOutputStream(new FileOutputStream(outputFile), decrypt);
+		byte[] salt = new byte[16];
+		for(int i = 0; i < 16; i++)
+			salt[i] = inputString[i + 16];
 
-		if(!outputFile.exists())
-			outputFile.createNewFile();
+		// truncate salt and IV to prepare string for decryption
+		byte[] truncated = new byte[inputString.length - 32];
+		for(int i = 32; i < inputString.length; i++)
+			truncated[i - 32] = inputString[i];
 
-		int b = 0;
-		while((b = istream.read()) != -1)
-			ostream.write(b);
-		
-		istream.close();
-		ostream.flush();
-		ostream.close();
+		// encode as Base64 or else the cipher will bark at us...
+		byte[] b64String = Base64.getEncoder().encode(truncated);
+		*/
 
-		return outputFile;
+		// @TODO HACK HACK HACK
+		Cipher decrypt = null;
+
+		try{
+			// @TODO don't hardcode password...
+			KeySpec pwkeyspec = new PBEKeySpec("156ab2gdb".toCharArray(), salt, 128 * 8, 128);
+
+			AlgorithmParameterSpec ivspec = new IvParameterSpec(initVector);
+
+			AlgorithmParameterSpec pwparams = new PBEParameterSpec(salt, 128 * 8, ivspec);
+
+			SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithHmacSHA256AndAES_128");
+			SecretKey key = keyFactory.generateSecret(pwkeyspec);
+
+			decrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
+			decrypt.init(Cipher.DECRYPT_MODE, key, pwparams);
+		} catch(Exception e) { e.printStackTrace(); }		
+
+		return (decrypt.doFinal(b64String)).toString();
 	}
 
 	public static void printByteArray(byte[] a)
@@ -143,9 +156,25 @@ public class Crypt
 				pwInBytes[i] = (byte)s.charAt(i);
 			else
 				pwInBytes[i] = (byte)255;
-			System.out.println(pwInBytes[i]);
 		}
 
 		return pwInBytes;
 	}
+
+	public static byte[] appendByteArray(byte[] src, byte[] dest)
+	{
+		byte[] concatedArray = new byte[src.length + dest.length];
+		
+		for(int i = 0; i < src.length; i++){
+			concatedArray[i] = src[i];
+		}
+
+		int offset = src.length;
+		for(int i = 0; i < dest.length; i++){
+			concatedArray[offset + i] = dest[i];
+		}
+
+		return concatedArray;
+	}
 }
+
