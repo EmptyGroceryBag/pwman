@@ -12,7 +12,6 @@ import java.security.spec.AlgorithmParameterSpec;
 
 //Crypto
 import javax.crypto.Cipher;
-import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.SecretKeySpec;
@@ -23,6 +22,7 @@ import javax.crypto.spec.IvParameterSpec;
 
 public class Crypt
 {
+	// @TODO revise parameter documentation
 	/**
 	 * encryptStringAES - Encrypts a byte array using AES and a password. After
 	 * the string is encrypted, the initialization vector and salt is appended.
@@ -36,31 +36,32 @@ public class Crypt
 	 * **/
 	public static byte[] encryptStringAES(
 		byte[] inputString,
-		Key key, 
-		AlgorithmParameterSpec pwparams,
-		AlgorithmParameterSpec ivspec) throws Exception
-	{
+		KeyGen params)
+		throws Exception { 
+		byte[] initVector = params.getInitVector();
+		byte[] salt = params.getSalt();
+
 		Cipher encrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
-		encrypt.init(Cipher.ENCRYPT_MODE, key, pwparams);
+		encrypt.init(
+				Cipher.ENCRYPT_MODE, 
+				params.makeKey(), 
+				params.getPBESpec()
+		);
 
 		byte[] encryptedString = encrypt.doFinal(inputString);
-
-		byte[] header = appendByteArray(
-				((PBEParameterSpec)pwparams).getSalt(), 
-				((IvParameterSpec)ivspec).getIV()
-				);
+		byte[] header = appendByteArray(salt, initVector);
 		return appendByteArray(header, encryptedString);
 	}
 
 	/**
 	 * decryptStringAES - Decrypts a byte array. The first 32 bytes of the array
-	 * must be the IV and salt arrays that were used to encrypt the array.
+	 * must be the IV and salt that were used to encrypt the array.
 	 *
 	 * @param inputString		byte array to be decrypted
 	 * 
 	 * @return 							decrypted bytes
 	 * **/
-	public static byte[] decryptStringAES(byte[] inputString) throws Exception
+	public static byte[] decryptStringAES(byte[] inputString)
 	{
 		// get salt and IV from first 32 bytes of array
 		byte[] salt = new byte[16];
@@ -78,26 +79,10 @@ public class Crypt
 
 		// @TODO HACK HACK HACK
 		Cipher decrypt = null;
-
-		try{
-			// @TODO MAKE KEY
-			/*
-			KeySpec pwkeyspec = new PBEKeySpec("156ab2gdb".toCharArray(), salt, 128 * 8, 128);
-
-			AlgorithmParameterSpec ivspec = new IvParameterSpec(initVector);
-
-			AlgorithmParameterSpec pwparams = new PBEParameterSpec(salt, 128 * 8, ivspec);
-
-			SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithHmacSHA256AndAES_128");
-			SecretKey key = keyFactory.generateSecret(pwkeyspec);
-
-			decrypt = Cipher.getInstance("PBEWithHmacSHA256AndAES_128");
-			decrypt.init(Cipher.DECRYPT_MODE, key, pwparams);
-		} catch(Exception e) { e.printStackTrace(); }		
-
-		return decrypt.doFinal(truncated);
+		// @TODO make key
+		//
+		return null;
 	}
-	*/
 
 	public static void printByteArray(byte[] a)
 	{
